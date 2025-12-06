@@ -9,15 +9,13 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 from reportlab.pdfbase.pdfmetrics import stringWidth
 
-# ---- Configurable bits ----
-
 # Path to logo file (relative to repo root)
 LOGO_PATH = os.environ.get("PDF_LOGO_PATH", "logo.png")
 
-# Footer doc/version text
+# Footer text (document version / ID)
 DOC_VERSION = os.environ.get("PDF_DOC_VERSION", "QAF-12-01 (rev 04)")
 
-# Logical sections and field order
+# Sections and logical field order
 FIELD_SECTIONS: List[Tuple[str, List[str]]] = [
     (
         "Customer Information",
@@ -105,12 +103,12 @@ def _lookup_field_value(all_fields: Dict[str, Any], logical_name: str) -> Any:
 
 def build_pdf_bytes(title: str, fields: Dict[str, Any]) -> bytes:
     """
-    Build a complaint PDF that looks like a structured form:
-    - Logo + title at top
-    - Date + complaint ID
-    - Sections with aligned labels and boxes
-    - Auto-resizing boxes based on text length
-    - Footer with doc version + page number
+    Build the complaint PDF with:
+      - Logo centered at top
+      - Title
+      - Date + Complaint ID
+      - Sections with aligned labels + auto-sized boxes
+      - Footer with document version + page number
     """
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
@@ -134,27 +132,20 @@ def build_pdf_bytes(title: str, fields: Dict[str, Any]) -> bytes:
     size_label = 9
     size_value = 9
 
-    # These come from the payload: we already pass submission_id + timestamp in main.py
-    complaint_id = str(fields.get("Complaint ID") or fields.get("submission_id") or "")
-    timestamp = str(fields.get("Date") or fields.get("timestamp") or "")
+    complaint_id = str(fields.get("submission_id") or fields.get("Complaint ID") or "")
+    timestamp = str(fields.get("timestamp") or fields.get("Date") or "")
 
-    page_num = 1  # track pages
-    y = 0         # will be set in start_page()
+    page_num = 1
+    y = 0  # updated by draw_header
 
     def draw_header():
         nonlocal y
-
-    # ============================================
-    # LARGE CENTERED LOGO
-    # ============================================
+        # Large centered logo
         if LOGO_PATH and os.path.exists(LOGO_PATH):
-            # Adjust these two to make the logo bigger or smaller:
-            logo_width = 80 * mm     # increase width
-            logo_height = 25 * mm    # increase height
-
-            # Center the logo at the top
+            logo_width = 80 * mm
+            logo_height = 25 * mm
             logo_x = (page_width - logo_width) / 2
-            logo_y = top_y - logo_height   # top margin
+            logo_y = top_y - logo_height
 
             c.drawImage(
                 LOGO_PATH,
@@ -163,45 +154,35 @@ def build_pdf_bytes(title: str, fields: Dict[str, Any]) -> bytes:
                 width=logo_width,
                 height=logo_height,
                 preserveAspectRatio=True,
-                mask='auto'
+                mask="auto",
             )
 
-        # Set cursor below the logo
-            y = logo_y - 8 * mm    # spacing below logo
+            y = logo_y - 8 * mm
         else:
             y = top_y
 
-        # ============================================
-        # TITLE (centered)
-        # ============================================
+        # Title
         c.setFont("Helvetica-Bold", size_title)
         c.drawCentredString(page_width / 2.0, y, title)
         y -= 2 * line_height
 
-        # ============================================
-        # DATE + COMPLAINT ID
-        # ============================================
+        # Date + Complaint ID
         c.setFont(font_value, 10)
-
         if timestamp:
             c.drawString(margin_x, y, f"Date: {timestamp}")
             y -= line_height
-
         if complaint_id:
             c.drawString(margin_x, y, f"Complaint ID: {complaint_id}")
             y -= line_height * 1.5
 
-
     def draw_footer():
         c.setFont("Helvetica", 8)
         footer_y = 12 * mm
-        # left: doc version
         c.drawString(margin_x, footer_y, DOC_VERSION)
-        # right: page number
         c.drawRightString(page_width - margin_x, footer_y, f"Page {page_num}")
 
     def finish_page(start_new: bool):
-        nonlocal page_num, y
+        nonlocal page_num
         draw_footer()
         c.showPage()
         page_num += 1
@@ -213,11 +194,10 @@ def build_pdf_bytes(title: str, fields: Dict[str, Any]) -> bytes:
         if y - h < bottom_margin:
             finish_page(start_new=True)
 
-    # start first page
+    # Start first page
     draw_header()
 
     body_fields = dict(fields)
-
     long_text_fields = {
         "Address",
         "Complaint Description",
@@ -226,7 +206,7 @@ def build_pdf_bytes(title: str, fields: Dict[str, Any]) -> bytes:
     }
 
     for section_title, section_fields in FIELD_SECTIONS:
-        # Skip section if absolutely everything is empty
+        # Skip empty sections
         if not any(_lookup_field_value(body_fields, name) not in ("", None, "") for name in section_fields):
             continue
 
@@ -241,7 +221,7 @@ def build_pdf_bytes(title: str, fields: Dict[str, Any]) -> bytes:
 
             label_text = logical_name
 
-            # Wrap label and value
+            # Wrap label + value
             c.setFont(font_label, size_label)
             label_lines = _wrap_text(label_text, label_col_width - 2, font_label, size_label)
             label_block_height = max(line_height * len(label_lines), line_height)
@@ -253,14 +233,13 @@ def build_pdf_bytes(title: str, fields: Dict[str, Any]) -> bytes:
             base_min = long_min_box_height if logical_name in long_text_fields else min_box_height
             box_height = max(base_min, line_height * (num_value_lines + 0.5))
 
-            # One row with label + box centered vertically
             row_height = max(label_block_height, box_height)
             ensure_space(row_height + line_height * 0.4)
 
             row_top = y
             row_bottom = y - row_height
 
-            # label
+            # Label
             c.setFont(font_label, size_label)
             label_start_y = row_top - (row_height - label_block_height) / 2
             current_y = label_start_y
@@ -268,14 +247,13 @@ def build_pdf_bytes(title: str, fields: Dict[str, Any]) -> bytes:
                 c.drawString(margin_x, current_y, line)
                 current_y -= line_height
 
-            # box
+            # Box
             box_x = margin_x + label_col_width
             box_y = row_top - (row_height + box_height) / 2 + 2
-
             c.setStrokeColor(colors.black)
             c.rect(box_x, box_y, value_col_width, box_height, stroke=1, fill=0)
 
-            # value in box
+            # Value
             c.setFont(font_value, size_value)
             text_y = box_y + box_height - line_height
             for line in value_lines:
@@ -288,7 +266,6 @@ def build_pdf_bytes(title: str, fields: Dict[str, Any]) -> bytes:
 
         y -= line_height * 0.5
 
-    # finish last page (no new header)
     finish_page(start_new=False)
     c.save()
     return buf.getvalue()
