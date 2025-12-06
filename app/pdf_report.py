@@ -141,35 +141,56 @@ def build_pdf_bytes(title: str, fields: Dict[str, Any]) -> bytes:
     page_num = 1  # track pages
     y = 0         # will be set in start_page()
 
-    def draw_header():
-        nonlocal y
-        # optional logo
-        if LOGO_PATH and os.path.exists(LOGO_PATH):
-            logo_w = 30 * mm
-            logo_h = 12 * mm
-            c.drawImage(
-                LOGO_PATH,
-                margin_x,
-                top_y + 5 * mm - logo_h,
-                width=logo_w,
-                height=logo_h,
-                preserveAspectRatio=True,
-                mask="auto",
-            )
+   def draw_header():
+    nonlocal y
 
-        c.setFont("Helvetica-Bold", size_title)
-        c.drawCentredString(page_width / 2.0, top_y, title)
+    # ============================================
+    # LARGE CENTERED LOGO
+    # ============================================
+    if LOGO_PATH and os.path.exists(LOGO_PATH):
+        # Adjust these two to make the logo bigger or smaller:
+        logo_width = 80 * mm     # increase width
+        logo_height = 25 * mm    # increase height
 
-        y = top_y - 2 * line_height
+        # Center the logo at the top
+        logo_x = (page_width - logo_width) / 2
+        logo_y = top_y - logo_height   # top margin
 
-        # Date + Complaint ID below the title
-        c.setFont(font_value, 10)
-        if timestamp:
-            c.drawString(margin_x, y, f"Date: {timestamp}")
-            y -= line_height
-        if complaint_id:
-            c.drawString(margin_x, y, f"Complaint ID: {complaint_id}")
-            y -= line_height * 1.5
+        c.drawImage(
+            LOGO_PATH,
+            logo_x,
+            logo_y,
+            width=logo_width,
+            height=logo_height,
+            preserveAspectRatio=True,
+            mask='auto'
+        )
+
+        # Set cursor below the logo
+        y = logo_y - 8 * mm    # spacing below logo
+    else:
+        y = top_y
+
+    # ============================================
+    # TITLE (centered)
+    # ============================================
+    c.setFont("Helvetica-Bold", size_title)
+    c.drawCentredString(page_width / 2.0, y, title)
+    y -= 2 * line_height
+
+    # ============================================
+    # DATE + COMPLAINT ID
+    # ============================================
+    c.setFont(font_value, 10)
+
+    if timestamp:
+        c.drawString(margin_x, y, f"Date: {timestamp}")
+        y -= line_height
+
+    if complaint_id:
+        c.drawString(margin_x, y, f"Complaint ID: {complaint_id}")
+        y -= line_height * 1.5
+
 
     def draw_footer():
         c.setFont("Helvetica", 8)
