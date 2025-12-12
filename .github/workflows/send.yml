@@ -1,0 +1,44 @@
+name: Generate PDF and send email
+
+on:
+  repository_dispatch:
+    types: [form_submit]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: send-${{ github.event.client_payload.submission_id }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Execute
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_SUBJECT: ${{ secrets.MAIL_SUBJECT }}
+          MAIL_BODY: ${{ secrets.MAIL_BODY }}
+          PDF_FILENAME: ${{ secrets.PDF_FILENAME }}
+          DROPBOX_ACCESS_TOKEN: ${{ secrets.DROPBOX_ACCESS_TOKEN }}
+          DROPBOX_BASE_FOLDER: ${{ secrets.DROPBOX_BASE_FOLDER }}
+          DROPBOX_CREATE_SHARED_LINK: ${{ secrets.DROPBOX_CREATE_SHARED_LINK }}
+        run: |
+          python -m app.main
