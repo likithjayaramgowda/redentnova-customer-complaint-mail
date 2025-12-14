@@ -2,7 +2,7 @@ name: Generate PDF and send email
 
 on:
   repository_dispatch:
-    types: [form_submit]
+    types: [complaint_submitted]
 
 permissions:
   contents: read
