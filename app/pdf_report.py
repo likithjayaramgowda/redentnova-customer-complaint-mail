@@ -138,6 +138,180 @@ def build_pdf_bytes(title: str, fields: Dict[str, Any]) -> bytes:
     page_num = 1
     y = 0  # updated by draw_header
 
+    def build_pdf_bytes_dynamic(
+    *,
+    title: str,
+    complaint_id: str,
+    timestamp: str,
+    status: str,
+    contact_consent: str,
+    sections: List[Dict[str, Any]],
+) -> bytes:
+    """Dynamic, form-driven PDF (boxed two-column layout)."""
+
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    page_width, page_height = A4
+
+    margin_x = 25 * mm
+    top_y = page_height - 25 * mm
+    bottom_margin = 20 * mm
+
+    line_height = 6 * mm
+    min_box_height = 7 * mm
+    long_min_box_height = 20 * mm
+
+    label_col_width = 65 * mm
+    value_col_width = page_width - 2 * margin_x - label_col_width - 5 * mm
+
+    font_label = "Helvetica-Bold"
+    font_value = "Helvetica"
+    size_title = 16
+    size_section = 12
+    size_label = 9
+    size_value = 9
+
+    page_num = 1
+    y = 0
+
+    def draw_header():
+        nonlocal y
+        if LOGO_PATH and os.path.exists(LOGO_PATH):
+            logo_width = 80 * mm
+            logo_height = 25 * mm
+            logo_x = (page_width - logo_width) / 2
+            logo_y = top_y - logo_height
+            c.drawImage(
+                LOGO_PATH,
+                logo_x,
+                logo_y,
+                width=logo_width,
+                height=logo_height,
+                preserveAspectRatio=True,
+                mask="auto",
+            )
+            y = logo_y - 8 * mm
+        else:
+            y = top_y
+
+        c.setFont("Helvetica-Bold", size_title)
+        c.drawCentredString(page_width / 2.0, y, title)
+        y -= 2 * line_height
+
+        # Boxed metadata header
+        box_w = page_width - 2 * margin_x
+        box_h = 22 * mm
+        box_x = margin_x
+        box_y = y - box_h + 4
+        c.setStrokeColor(colors.black)
+        c.rect(box_x, box_y, box_w, box_h, stroke=1, fill=0)
+
+        c.setFont(font_value, 10)
+        left_x = box_x + 6
+        right_x = box_x + box_w / 2 + 6
+        text_y = box_y + box_h - 9
+
+        c.drawString(left_x, text_y, f"Complaint ID: {complaint_id}")
+        c.drawString(right_x, text_y, f"Status: {status}")
+        text_y -= 12
+        if timestamp:
+            c.drawString(left_x, text_y, f"Date: {timestamp}")
+        c.drawString(right_x, text_y, f"Consent: {contact_consent.upper()}")
+
+        y = box_y - 10
+
+    def draw_footer():
+        c.setFont("Helvetica", 8)
+        footer_y = 12 * mm
+        c.drawString(margin_x, footer_y, DOC_VERSION)
+        c.drawRightString(page_width - margin_x, footer_y, f"Page {page_num}")
+
+    def finish_page(start_new: bool):
+        nonlocal page_num
+        draw_footer()
+        c.showPage()
+        page_num += 1
+        if start_new:
+            draw_header()
+
+    def ensure_space(h: float):
+        nonlocal y
+        if y - h < bottom_margin:
+            finish_page(start_new=True)
+
+    draw_header()
+
+    def draw_section(title_text: str, rows: List[Dict[str, Any]]):
+        nonlocal y
+
+        filtered = []
+        for r in rows:
+            label = str(r.get("label") or "").strip()
+            value = "" if r.get("value") is None else str(r.get("value"))
+            if label and value.strip():
+                filtered.append((label, value))
+
+        if not filtered:
+            return
+
+        ensure_space(3 * line_height)
+        c.setFont("Helvetica-Bold", size_section)
+        c.drawString(margin_x, y, title_text)
+        y -= line_height * 1.3
+
+        for label_text, value in filtered:
+            c.setFont(font_label, size_label)
+            label_lines = _wrap_text(label_text, label_col_width - 2, font_label, size_label)
+            label_block_height = max(line_height * len(label_lines), line_height)
+
+            c.setFont(font_value, size_value)
+            value_lines = _wrap_text(value, value_col_width - 4, font_value, size_value)
+            num_value_lines = max(1, len(value_lines))
+
+            base_min = long_min_box_height if len(value) > 120 else min_box_height
+            box_height = max(base_min, line_height * (num_value_lines + 0.5))
+            row_height = max(label_block_height, box_height)
+
+            ensure_space(row_height + line_height * 0.4)
+
+            row_top = y
+            row_bottom = y - row_height
+
+            c.setFont(font_label, size_label)
+            label_start_y = row_top - (row_height - label_block_height) / 2
+            cur_y = label_start_y
+            for line in label_lines:
+                c.drawString(margin_x, cur_y, line)
+                cur_y -= line_height
+
+            box_x = margin_x + label_col_width
+            box_y = row_top - (row_height + box_height) / 2 + 2
+            c.setStrokeColor(colors.black)
+            c.rect(box_x, box_y, value_col_width, box_height, stroke=1, fill=0)
+
+            c.setFont(font_value, size_value)
+            text_y = box_y + box_height - line_height
+            for line in value_lines:
+                if text_y < box_y + 2:
+                    break
+                c.drawString(box_x + 2, text_y, line)
+                text_y -= line_height
+
+            y = row_bottom - line_height * 0.2
+
+        y -= line_height * 0.6
+
+    for sec in sections or []:
+        sec_title = str(sec.get("title") or "").strip() or "Form Details"
+        sec_rows = sec.get("rows") or []
+        if isinstance(sec_rows, list):
+            draw_section(sec_title, sec_rows)
+
+    finish_page(start_new=False)
+    c.save()
+    return buf.getvalue()
+
+
     def draw_header():
         nonlocal y
         # Large centered logo
