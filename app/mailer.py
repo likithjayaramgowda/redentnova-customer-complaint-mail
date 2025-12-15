@@ -17,7 +17,7 @@ def send_mail(
     smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
     smtp_port = int(os.environ.get("SMTP_PORT", "587"))
     smtp_user = os.environ.get("SMTP_USER")
-    smtp_password = os.environ.get("SMTP_PASSWORD")
+    smtp_password = os.environ.get("SMTP_PASS")
     mail_from = os.environ.get("MAIL_FROM", smtp_user)
 
     if not smtp_user or not smtp_password:
