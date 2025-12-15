@@ -138,7 +138,7 @@ def build_pdf_bytes(title: str, fields: Dict[str, Any]) -> bytes:
     page_num = 1
     y = 0  # updated by draw_header
 
-    def build_pdf_bytes_dynamic(
+def build_pdf_bytes_dynamic(
     *,
     title: str,
     complaint_id: str,
