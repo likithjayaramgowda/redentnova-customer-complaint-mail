@@ -8,7 +8,8 @@ from dotenv import load_dotenv
 from app.dropbox_uploader import build_dropbox_path, load_dropbox_config, upload_pdf_and_get_link
 from app.mailer import load_smtp_config, send_pdf
 from app.payload import parse_submission
-from app.pdf_report import build_pdf_bytes
+from app.pdf_report import build_pdf_bytes, build_pdf_bytes_dynamic
+
 
 
 def load_event() -> Dict[str, Any]:
@@ -33,10 +34,25 @@ def main() -> None:
     body = os.environ.get("MAIL_BODY", "Attached is the generated PDF from the form submission.")
     filename = os.environ.get("PDF_FILENAME", "submission.pdf")
 
+    title = f"{submission.form_title} — Submission"
+
+# If sections exist -> fully dynamic, form-driven professional PDF
+if submission.sections:
+    pdf = build_pdf_bytes_dynamic(
+        title=title,
+        complaint_id=submission.submission_id,
+        timestamp=submission.timestamp,
+        status=os.environ.get("COMPLAINT_STATUS", "Received"),
+        contact_consent=submission.contact_consent,
+        sections=submission.sections,
+    )
+else:
+    # Legacy: schema-driven PDF
     pdf = build_pdf_bytes(
-        title=f"{submission.form_title} — Submission",
+        title=title,
         fields={"submission_id": submission.submission_id, "timestamp": submission.timestamp, **submission.fields},
     )
+
 
     # Optional: Upload to Dropbox (recommended, since it's the easiest durable archive)
     dropbox_cfg = load_dropbox_config()
