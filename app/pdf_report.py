@@ -146,8 +146,8 @@ def build_pdf_bytes(title: str, fields: Dict[str, Any]) -> bytes:
     status: str,
     contact_consent: str,
     sections: List[Dict[str, Any]],
-) -> bytes:
-    """Dynamic, form-driven PDF (boxed two-column layout)."""
+    ) -> bytes:
+        """Dynamic, form-driven PDF (boxed two-column layout)."""
 
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
