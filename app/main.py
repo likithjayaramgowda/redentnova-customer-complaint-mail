@@ -1,5 +1,4 @@
 import os
-from dotenv import load_dotenv
 
 from app.payload import load_event, parse_submission
 from app.pdf_report import build_pdf_bytes, build_pdf_bytes_dynamic
@@ -7,70 +6,53 @@ from app.mailer import send_mail
 
 
 def main():
-    # --------------------------------------------------
-    # Local convenience (safe in GitHub Actions as well)
-    # --------------------------------------------------
-    load_dotenv()
-
-    # --------------------------------------------------
-    # 1. Load GitHub repository_dispatch payload
-    # --------------------------------------------------
+    # Load GitHub repository_dispatch event
     event = load_event()
-
-    # --------------------------------------------------
-    # 2. Parse payload into Submission object
-    # --------------------------------------------------
     submission = parse_submission(event)
 
-    # --------------------------------------------------
-    # 3. Prepare common values
-    # --------------------------------------------------
-    title = f"{submission.form_title} – Customer Complaint"
-    filename = f"{submission.submission_id}.pdf"
-
+    # Mail content
     subject = os.environ.get(
         "MAIL_SUBJECT",
-        f"{submission.form_title} – Complaint {submission.submission_id}",
+        f"{submission.form_title} – Complaint {submission.complaint_id}",
     )
-
     body = os.environ.get(
         "MAIL_BODY",
-        "Attached is the generated customer complaint PDF.",
+        "Please find attached the generated complaint PDF.",
     )
 
-    # --------------------------------------------------
-    # 4. Generate PDF
-    #    Dynamic if sections exist, else legacy fallback
-    # --------------------------------------------------
+    filename = os.environ.get("PDF_FILENAME", "complaint.pdf")
+
+    title = f"{submission.form_title} – Complaint Report"
+
+    # ---- PDF generation ----
     if submission.sections:
+        # Fully dynamic, form-driven PDF
         pdf_bytes = build_pdf_bytes_dynamic(
             title=title,
-            complaint_id=submission.submission_id,
+            complaint_id=submission.complaint_id,
             timestamp=submission.timestamp,
             status=submission.status,
             contact_consent=submission.contact_consent,
             sections=submission.sections,
         )
     else:
+        # Fallback legacy mode (should rarely happen)
         pdf_bytes = build_pdf_bytes(
             title=title,
             fields={
-                "submission_id": submission.submission_id,
+                "complaint_id": submission.complaint_id,
                 "timestamp": submission.timestamp,
                 **submission.fields,
             },
         )
 
-    # --------------------------------------------------
-    # 5. Send email
-    #    (lab always included, customer only if consent=yes)
-    # --------------------------------------------------
+    # ---- Send email ----
     send_mail(
+        to=submission.email_to,
         subject=subject,
         body=body,
-        pdf_bytes=pdf_bytes,
-        filename=filename,
-        recipients=submission.email_to,
+        attachment_bytes=pdf_bytes,
+        attachment_name=filename,
     )
 
 
